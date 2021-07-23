@@ -26,7 +26,9 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"math/rand"
 	"net/http"
+	"time"
 
 	"github.com/spf13/cobra"
 )
@@ -40,12 +42,20 @@ var jokeCmd = &cobra.Command{
 	`,
 	Run: func(cmd *cobra.Command, args []string) {
 		//fmt.Println("joke called")
-		getRandomJoke()
+		joketerm, _ := cmd.Flags().GetString("term")
+
+		if joketerm != "" {
+			getRandomJokeWithTerm(joketerm)
+		} else {
+			getRandomJoke()
+		}
+
 	},
 }
 
 func init() {
 	rootCmd.AddCommand(jokeCmd)
+	jokeCmd.PersistentFlags().String("term", "", "A search term for the joke ")
 }
 
 type Joke struct {
@@ -54,8 +64,44 @@ type Joke struct {
 	Status int    `json:"status"`
 }
 
+type SearchRes struct {
+	Results    json.RawMessage `json:"results"`
+	Searchterm string          `json:"search_term"`
+	Status     int             `json:"status"`
+	TotalJokes int             `json:"total_jokes"`
+}
+
+func getRandomJokeWithTerm(joketerm string) {
+	fmt.Printf("The search term is %v\n", joketerm)
+	//url := "https://icanhazdadjoke.com/search?term=" + joketerm
+	url := fmt.Sprintf("https://icanhazdadjoke.com/search?term=%s", joketerm)
+	resBytes := getJokeAPI(url)
+	search_res := SearchRes{}
+
+	if err := json.Unmarshal(resBytes, &search_res); err != nil {
+		log.Printf("could not unmarshall responsee - %v", err)
+	}
+	jokes := []Joke{}
+
+	if err := json.Unmarshal(search_res.Results, &jokes); err != nil {
+		log.Printf("could not unmarshall search_res.response Raw - %v", err)
+	}
+	rand.Seed(time.Now().UnixNano())
+	if search_res.TotalJokes == 0 {
+		log.Printf("No Joke found for term- %s", joketerm)
+	} else {
+		fmt.Println(jokes[rand.Intn(search_res.TotalJokes)].Joke)
+	}
+
+}
+
 func getRandomJoke() {
 	url := "https://icanhazdadjoke.com/"
+
+	// if searchTerm != "" {
+	// 	url = url + "/search?term=" + searchTerm
+	// }
+
 	resBytes := getJokeAPI(url)
 
 	joke := Joke{}
